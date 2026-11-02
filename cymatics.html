@@ -771,13 +771,18 @@ function drawRipples(dt) {
    EFECTOS "PICANTE"
    ========================================================= */
 function applyBloom() {
+  // Bloom reactivo al audio: silencio → 0
+  const lvl = bands.level * visGain + beatPulse * 0.15;
+  const bloomAlpha = 0.55 * Math.min(1, lvl * 2.4);
+  if (bloomAlpha < 0.01) return;
+
   bloomCtx.clearRect(0, 0, bloomCv.width, bloomCv.height);
   bloomCtx.filter = 'blur(5px)';
   bloomCtx.drawImage(cv, 0, 0, bloomCv.width, bloomCv.height);
   bloomCtx.filter = 'none';
 
   ctx.globalCompositeOperation = 'lighter';
-  ctx.globalAlpha = 0.55;
+  ctx.globalAlpha = bloomAlpha;
   ctx.drawImage(bloomCv, 0, 0, W, H);
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
