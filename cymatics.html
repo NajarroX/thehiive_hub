@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>CYMATICS · VJ GENERATOR</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:#000;}
+  body{
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    color:#dff6ff; -webkit-font-smoothing:antialiased;
+    user-select:none;
+  }
+  body.hud-hidden { cursor:none; }
+  #cv{position:fixed;inset:0;display:block;width:100%;height:100%;}
+
+  .ui{
+    position:fixed; z-index:10; pointer-events:none;
+    transition:opacity .35s ease, transform .35s ease;
+    visibility:visible;
+    text-shadow:0 0 12px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.9);
+  }
+  .ui.hidden{
+    opacity:0 !important;
+    visibility:hidden !important;
+    transform:translateY(6px);
+    transition:opacity .35s ease, transform .35s ease, visibility 0s linear .35s !important;
+  }
+
+  #top{top:22px; left:24px; display:flex; flex-direction:column; gap:6px;}
+  #title{font-size:13px; letter-spacing:.42em; font-weight:600; color:#7fe9ff; opacity:.95;}
+  #title span{color:#ff4d9d;}
+  #status{font-size:11px; line-height:1.65; letter-spacing:.12em; color:#9ad8e8; opacity:.85;}
+  #status b{color:#fff;font-weight:600;}
+  #status i{color:#ff9ecb;font-style:normal;}
+  #status .off{color:#ff5e7e;font-style:normal;}
+
+  #meters{top:22px; right:24px; display:flex; flex-direction:column; align-items:flex-end; gap:5px; font-size:9px; letter-spacing:.18em; color:#78c8dd;}
+  .meter{display:flex; align-items:center; gap:8px;}
+  .bar{width:88px;height:3px;background:rgba(120,200,221,.16);border-radius:2px;overflow:hidden;}
+  .bar i{display:block;height:100%;width:0%;border-radius:2px;
+         background:linear-gradient(90deg,#00e5ff,#7c4dff,#ff2d95);
+         transition:width .04s linear;}
+  .mlabel{width:38px;text-align:right;opacity:.6}
+
+  #help{bottom:22px; left:24px; display:grid; grid-template-columns:auto auto; gap:3px 26px; font-size:10px; letter-spacing:.08em; color:#8fc4d6; opacity:.75;}
+  #help div{white-space:nowrap;}
+  #help kbd{
+    display:inline-block; min-width:15px; padding:1px 5px; margin-right:6px;
+    border:1px solid rgba(143,196,214,.35); border-radius:3px;
+    font:inherit; font-size:9px; color:#dff6ff; text-align:center;
+    background:rgba(143,196,214,.08);
+  }
+  #help .alt{opacity:.5;font-size:9px;margin-left:2px}
+
+  #audioMode{bottom:22px; right:24px; font-size:10px; letter-spacing:.2em; color:#78c8dd; opacity:.8; text-align:right; line-height:1.7;}
+  #audioMode b{color:#ff9ecb;font-weight:600}
+
+  #start{
+    position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(circle at 50% 50%,#071018 0%,#000 70%);
+    transition:opacity .6s ease;
+  }
+  #start.done{opacity:0;pointer-events:none}
+  #start div{text-align:center;letter-spacing:.4em;font-size:12px;color:#4fb6d6; animation:pulse 2.4s ease-in-out infinite;}
+  #start small{display:block;margin-top:14px;font-size:9px;letter-spacing:.25em;color:#2e6f86}
+  @keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div id="top" class="ui">
+  <div id="title">CYM<span>A</span>TICS <span>·</span> VJ</div>
+  <div id="status"></div>
+</div>
+
+<div id="meters" class="ui">
+  <div class="meter"><span class="mlabel">BASS</span><span class="bar"><i id="mb0"></i></span></div>
+  <div class="meter"><span class="mlabel">LOW</span><span class="bar"><i id="mb1"></i></span></div>
+  <div class="meter"><span class="mlabel">MID</span><span class="bar"><i id="mb2"></i></span></div>
+  <div class="meter"><span class="mlabel">HIGH</span><span class="bar"><i id="mb3"></i></span></div>
+  <div class="meter"><span class="mlabel">AIR</span><span class="bar"><i id="mb4"></i></span></div>
+</div>
+
+<div id="help" class="ui">
+  <div><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd><kbd>5</kbd> modo visual</div>
+  <div><kbd>←</kbd><kbd>→</kbd> n &nbsp;·&nbsp; <kbd>↑</kbd><kbd>↓</kbd> m</div>
+  <div><kbd>I</kbd> impulso <span class="alt">(␣ / ⏎)</span></div>
+  <div><kbd>X</kbd> zoom fill / fit</div>
+  <div><kbd>A</kbd> auto-morph</div>
+  <div><kbd>G</kbd> forma rect / radial</div>
+  <div><kbd>C</kbd> paleta (fija)</div>
+  <div><kbd>T</kbd> estela</div>
+  <div><kbd>+</kbd><kbd>-</kbd> partículas</div>
+  <div><kbd>[</kbd><kbd>]</kbd> ganancia audio</div>
+  <div><kbd>L</kbd> bloom / glow</div>
+  <div><kbd>K</kbd> kaleidoscopio</div>
+  <div><kbd>J</kbd> beat FX</div>
+  <div><kbd>M</kbd> micrófono</div>
+  <div><kbd>R</kbd> aleatorio</div>
+  <div><kbd>F</kbd> pantalla completa</div>
+  <div><kbd>H</kbd> ocultar todo</div>
+  <div><kbd>P</kbd> pausa</div>
+  <div><kbd>S</kbd> captura PNG</div>
+  <div><kbd>0</kbd> reset</div>
+</div>
+
+<div id="audioMode" class="ui"></div>
+
+<div id="start"><div>PULSA CUALQUIER TECLA<small>M micrófono · L bloom · K kaleidoscopio · J beat FX · H modo presentación</small></div></div>
+
+<script>
+(() => {
+"use strict";
+
+/* =========================================================
+   CANVAS / RESIZE
+   ========================================================= */
+const cv  = document.getElementById('cv');
+const ctx = cv.getContext('2d', { alpha:false });
+
+const snapCv  = document.createElement('canvas');
+const snapCtx = snapCv.getContext('2d');
+const bloomCv  = document.createElement('canvas');
+const bloomCtx = bloomCv.getContext('2d');
+
+let W = 0, H = 0, DPR = 1, CX = 0, CY = 0, SCALE = 400;
+let zoomMode = 'fill';
+
+function updateScale() {
+  if (zoomMode === 'fit') {
+    SCALE = Math.min(W, H) * 0.46;
+  } else if (S.shape === 'radial') {
+    SCALE = Math.max(W, H) * 0.65;
+  } else {
+    SCALE = Math.max(W, H) * 0.5 * 1.02;
+  }
+}
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  cv.width  = Math.max(1, Math.floor(W * DPR));
+  cv.height = Math.max(1, Math.floor(H * DPR));
+  cv.style.width  = W + 'px';
+  cv.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+  snapCv.width  = cv.width;
+  snapCv.height = cv.height;
+  bloomCv.width  = Math.max(1, Math.floor(cv.width  / 4));
+  bloomCv.height = Math.max(1, Math.floor(cv.height / 4));
+
+  CX = W * 0.5;
+  CY = H * 0.5;
+  updateScale();
+  clearCanvas();
+}
+window.addEventListener('resize', resize);
+
+function clearCanvas() {
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+}
+
+/* =========================================================
+   PALETAS
+   ========================================================= */
+const PALETTES = [
+  { name:'NEÓN',        colors:['#00e5ff','#7c4dff','#ff2d95','#ffd166','#00ffa3'] },
+  { name:'ÁMBAR',       colors:['#ff6b00','#ffb703','#fb8500','#ffd60a','#ff2e00'] },
+  { name:'BIOS',        colors:['#00ff9f','#00d4ff','#7cffcb','#c6ff00','#00ffea'] },
+  { name:'ULTRAVIOLETA',colors:['#b14aed','#ff4ecd','#4a7dff','#e0aaff','#ff8fab'] },
+  { name:'MONOCROMO',   colors:['#ffffff','#c9d6e3','#8fa6b8','#e8f1f8','#a8b8c8'] },
+  { name:'LAVA',        colors:['#ff2200','#ff6a00','#ffd000','#ff0033','#ff9500'] },
+  { name:'GLACIAR',     colors:['#e0fbfc','#98c1d9','#3d5a80','#ee6c4d','#ffffff'] }
+];
+const LUT_N = 12;
+let LUT = [];
+let LUT_FINE_RGB = [];   // 48 colores interpolados (legado plasma)
+
+function hex2rgb(h) {
+  h = h.replace('#','');
+  return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
+}
+function buildLUT() {
+  const cols = PALETTES[S.palette].colors.map(hex2rgb);
+  LUT = [];
+  for (let i = 0; i < LUT_N; i++) {
+    const t = (i / (LUT_N - 1)) * (cols.length - 1);
+    const i0 = Math.floor(t);
+    const i1 = Math.min(cols.length - 1, i0 + 1);
+    const f  = t - i0;
+    const r = Math.round(cols[i0][0] + (cols[i1][0] - cols[i0][0]) * f);
+    const g = Math.round(cols[i0][1] + (cols[i1][1] - cols[i0][1]) * f);
+    const b = Math.round(cols[i0][2] + (cols[i1][2] - cols[i0][2]) * f);
+    LUT.push(`rgb(${r},${g},${b})`);
+  }
+  LUT_FINE_RGB = [];
+  const FINE_N = 48;
+  for (let i = 0; i < FINE_N; i++) {
+    const t = (i / (FINE_N - 1)) * (cols.length - 1);
+    const i0 = Math.floor(t);
+    const i1 = Math.min(cols.length - 1, i0 + 1);
+    const f  = t - i0;
+    LUT_FINE_RGB.push([
+      Math.round(cols[i0][0] + (cols[i1][0] - cols[i0][0]) * f),
+      Math.round(cols[i0][1] + (cols[i1][1] - cols[i0][1]) * f),
+      Math.round(cols[i0][2] + (cols[i1][2] - cols[i0][2]) * f)
+    ]);
+  }
+}
+
+/* =========================================================
+   ESTADO
+   ========================================================= */
+const S = {
+  mode: 0,
+  paused: false,
+  auto: true,
+  hud: true,
+  time: 0,
+  phase: 0,
+  phaseSpeed: 0.45,
+  n: 3, m: 5,
+  nT: 3, mT: 5,
+  a: 1, b: -1,
+  shape: 'rect',
+  palette: 0,
+  count: 3000,
+  trail: 0.13,
+  bloom: false,
+  kSegments: 0,
+  beatFx: false
+};
+
+const MODE_NAMES = ['PARTÍCULAS','CONTORNOS','FLUJO','TÚNEL','ESPECTRO'];
+const K_CYCLE    = [0, 4, 6, 8, 12];
+
+/* =========================================================
+   CAMPO DE ONDA
+   ========================================================= */
+let F_n = 3, F_m = 5, F_a = 1, F_b = -1, F_ph = 0, F_shape = 0;
+
+function field(x, y) {
+  if (F_shape === 1) {
+    const r2 = x*x + y*y;
+    if (r2 > 1) return 0;
+    const r = Math.sqrt(r2);
+    const th = Math.atan2(y, x);
+    return Math.cos(F_n * Math.PI * r + F_ph) * Math.cos(F_m * th) * (1 - r2);
+  }
+  return F_a * Math.cos(F_n * Math.PI * x + F_ph) * Math.cos(F_m * Math.PI * y)
+       + F_b * Math.cos(F_m * Math.PI * x) * Math.cos(F_n * Math.PI * y - F_ph);
+}
+
+/* =========================================================
+   AUDIO
+   ========================================================= */
+const SPEC_N = 1024;
+const spec = new Uint8Array(SPEC_N);
+const bands = { bass:0, low:0, mid:0, high:0, air:0, level:0 };
+let beatPulse = 0;
+
+let masterGain = 1.35;
+let visGain = 1.0;
+
+let actx = null, analyser = null, freqData = null, micStream = null;
+let audioMode = 'demo';
+
+const RANGES = [[1,10],[10,40],[40,150],[150,400],[400,900]];
+const BKEYS  = ['bass','low','mid','high','air'];
+const bandPeak = new Float32Array(5).fill(0.45);
+
+const bassHist = new Float32Array(45);
+let bassSum = 0, bassPtr = 0, lastBeatT = -1000;
+
+const ripples = [];
+
+function updateDemoSpec(t) {
+  for (let i = 0; i < SPEC_N; i++) {
+    const f = i / SPEC_N;
+    let v = 0;
+    v += 0.95 * Math.exp(-Math.pow((f - 0.018) / 0.028, 2)) * (0.72 + 0.28 * Math.sin(t * 6.9));
+    v += 0.72 * Math.exp(-Math.pow((f - (0.055 + 0.018 * Math.sin(t * 0.9))) / 0.038, 2));
+    v += 0.52 * Math.exp(-Math.pow((f - (0.145 + 0.05 * Math.sin(t * 0.61 + 1.3))) / 0.062, 2));
+    v += 0.40 * Math.exp(-Math.pow((f - (0.32 + 0.09 * Math.sin(t * 0.41 + 2.4))) / 0.10, 2));
+    v += 0.30 * Math.exp(-Math.pow((f - (0.58 + 0.11 * Math.sin(t * 0.33 + 3.7))) / 0.16, 2));
+    v += 0.16 * Math.exp(-Math.pow((f - 0.86) / 0.20, 2)) * (0.5 + 0.5 * Math.sin(t * 11.3 + i * 0.71));
+    v *= 0.82 + 0.18 * Math.sin(i * 0.7371 + t * 3.1);
+    v *= 0.7 + 0.3 * Math.sin(t * 2.7 + f * 1.7);
+    v = Math.tanh(v * 0.9);
+    spec[i] = (v * 255) | 0;
+  }
+}
+
+function updateAudio(dt, t) {
+  if (audioMode === 'mic' && analyser) {
+    analyser.getByteFrequencyData(spec);
+  } else {
+    updateDemoSpec(t);
+  }
+
+  for (let r = 0; r < 5; r++) {
+    const a0 = RANGES[r][0], a1 = RANGES[r][1];
+    let sum = 0, cnt = 0, peak = 0;
+    for (let i = a0; i < a1; i++) {
+      const v = spec[i];
+      sum += v;
+      if (v > peak) peak = v;
+      cnt++;
+    }
+    const rms = sum / cnt / 255;
+    const pk  = peak / 255;
+    let raw = rms * 0.55 + pk * 0.45;
+    raw = Math.pow(raw, r === 0 ? 0.55 : 0.68);
+
+    if (audioMode === 'mic') {
+      bandPeak[r] = Math.max(raw, bandPeak[r] * Math.pow(0.94, dt));
+      raw = raw / Math.max(0.15, bandPeak[r]);
+      if (raw > 1.4) raw = 1.4;
+    }
+    if (raw < 0.02) raw = 0;
+
+    const cur = bands[BKEYS[r]];
+    const rate = raw > cur ? 65 : 18;
+    const k = Math.min(1, dt * rate);
+    bands[BKEYS[r]] = cur + (raw - cur) * k;
+  }
+
+  bands.level += ((bands.bass + bands.low + bands.mid + bands.high + bands.air) / 5 - bands.level) * Math.min(1, dt * 16);
+  visGain = Math.min(2.2, Math.max(0.1, masterGain / 1.35));
+
+  const bass = bands.bass;
+  bassSum -= bassHist[bassPtr];
+  bassHist[bassPtr] = bass;
+  bassSum += bass;
+  bassPtr = (bassPtr + 1) % bassHist.length;
+  const avg = bassSum / bassHist.length;
+
+  const now = performance.now();
+  if (bass > avg * 1.10 && bass > 0.07 && (bass - avg) > 0.05 && now - lastBeatT > 140) {
+    lastBeatT = now;
+    beatPulse = 1;
+    ripples.push({ t: 0, str: 0.55 + bands.bass * 0.9 });
+    if (ripples.length > 14) ripples.shift();
+  }
+  beatPulse *= Math.pow(0.008, dt);
+}
+
+async function toggleMic() {
+  if (audioMode === 'mic') {
+    if (micStream) micStream.getTracks().forEach(tr => tr.stop());
+    micStream = null;
+    audioMode = 'demo';
+    updateAudioLabel();
+    return;
+  }
+  try {
+    if (!actx) {
+      actx = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = actx.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.72;
+      freqData = new Uint8Array(analyser.frequencyBinCount);
+    }
+    await actx.resume();
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation:false, noiseSuppression:false, autoGainControl:false }
+    });
+    micStream = stream;
+    const src = actx.createMediaStreamSource(stream);
+    src.connect(analyser);
+    audioMode = 'mic';
+  } catch (err) {
+    audioMode = 'demo';
+    console.warn('Micrófono no disponible:', err);
+  }
+  updateAudioLabel();
+}
+
+/* =========================================================
+   PARTÍCULAS (modo 0)
+   ========================================================= */
+const MAXN = 14000;
+const pX = new Float32Array(MAXN);
+const pY = new Float32Array(MAXN);
+const pPhase = new Float32Array(MAXN);
+const buckets = [];
+for (let i = 0; i < LUT_N; i++) buckets.push([]);
+
+function spawnParticle(i) {
+  if (S.shape === 'radial') {
+    const a = Math.random() * Math.PI * 2;
+    const r = Math.sqrt(Math.random()) * 0.99;
+    pX[i] = Math.cos(a) * r;
+    pY[i] = Math.sin(a) * r;
+  } else {
+    pX[i] = Math.random() * 2 - 1;
+    pY[i] = Math.random() * 2 - 1;
+  }
+}
+function respawnAll() {
+  for (let i = 0; i < MAXN; i++) {
+    spawnParticle(i);
+    pPhase[i] = Math.random() * Math.PI * 2;
+  }
+}
+
+function drawParticles(dt) {
+  const N = S.count;
+  const h = 0.004, inv2h = 1 / (2 * h);
+  const radial = S.shape === 'radial';
+
+  const vB = bands.bass * visGain;
+  const vL = bands.low  * visGain;
+  const vH = bands.high * visGain;
+  const vA = bands.air  * visGain;
+  const vM = bands.mid  * visGain;
+
+  const speed = 0.40 + vB * 3.2 + vL * 0.9 + beatPulse * 1.8;
+  const swirl = 0.12 + vH * 1.4 + vA * 1.1 + vM * 0.4 + beatPulse * 0.6;
+  const sz    = 1.6 + vB * 1.3 + beatPulse * 1.3;
+
+  const wobAmp  = 0.03 + vM * 0.09 + beatPulse * 0.05;
+  const wobFreq = 2.0 + vH * 3.5 + vA * 1.8;
+  const tNow    = S.time;
+
+  for (let b = 0; b < LUT_N; b++) buckets[b].length = 0;
+
+  for (let i = 0; i < N; i++) {
+    let x = pX[i], y = pY[i];
+
+    const f  = field(x, y);
+    const gx = (field(x + h, y) - field(x - h, y)) * inv2h;
+    const gy = (field(x, y + h) - field(x, y - h)) * inv2h;
+
+    const gm = Math.sqrt(gx * gx + gy * gy) + 1e-5;
+    const ux = gx / gm, uy = gy / gm;
+    const k = f > 1 ? 1 : f < -1 ? -1 : f;
+
+    let vx = -ux * k * speed - uy * swirl;
+    let vy = -uy * k * speed + ux * swirl;
+
+    const ph  = pPhase[i] + tNow * wobFreq;
+    const ph2 = pPhase[i] * 1.73 + tNow * wobFreq * 0.61 + 1.3;
+    vx += (Math.cos(ph) + 0.55 * Math.cos(ph2)) * wobAmp;
+    vy += (Math.sin(ph * 1.37) + 0.55 * Math.sin(ph2 * 0.87)) * wobAmp;
+
+    x += vx * dt;
+    y += vy * dt;
+
+    let out;
+    if (radial) out = (x * x + y * y) > 1;
+    else        out = (x < -1 || x > 1 || y < -1 || y > 1);
+
+    if (out) { spawnParticle(i); x = pX[i]; y = pY[i]; }
+    else { pX[i] = x; pY[i] = y; }
+
+    let cval = (x * 0.5 + 0.5) * 0.65 + (y * 0.5 + 0.5) * 0.35;
+    if (cval < 0) cval = 0; else if (cval > 1) cval = 1;
+    buckets[(cval * (LUT_N - 1)) | 0].push(i);
+  }
+
+  for (let b = 0; b < LUT_N; b++) {
+    const arr = buckets[b];
+    if (arr.length === 0) continue;
+    ctx.fillStyle = LUT[b];
+    for (let j = 0; j < arr.length; j++) {
+      const i = arr[j];
+      ctx.fillRect(CX + pX[i] * SCALE - sz * 0.5, CY + pY[i] * SCALE - sz * 0.5, sz, sz);
+    }
+  }
+}
+
+/* =========================================================
+   CONTORNOS (modo 1)
+   ========================================================= */
+const CG_N = 62;
+const cgrid = new Float32Array((CG_N + 1) * (CG_N + 1));
+const CASES = [
+  [], [[3,0]], [[0,1]], [[3,1]], [[1,2]], [[3,0],[1,2]], [[0,2]], [[2,3]],
+  [[2,3]], [[0,2]], [[0,3],[1,2]], [[1,2]], [[1,3]], [[0,1]], [[0,3]], []
+];
+let _ex = 0, _ey = 0;
+function edgePoint(e, x0, y0, st, v0, v1, v2, v3, L) {
+  let t;
+  if (e === 0)      { t = (L - v0) / (v1 - v0 + 1e-12); _ex = x0 + t * st;      _ey = y0; }
+  else if (e === 1) { t = (L - v1) / (v2 - v1 + 1e-12); _ex = x0 + st;          _ey = y0 + t * st; }
+  else if (e === 2) { t = (L - v2) / (v3 - v2 + 1e-12); _ex = x0 + st - t * st; _ey = y0 + st; }
+  else              { t = (L - v3) / (v0 - v3 + 1e-12); _ex = x0;               _ey = y0 + st - t * st; }
+}
+
+function drawContours(dt) {
+  const N = CG_N, gw = N + 1, st = 2 / N;
+  for (let j = 0; j <= N; j++) {
+    const y = -1 + j * st;
+    const row = j * gw;
+    for (let i = 0; i <= N; i++) cgrid[row + i] = field(-1 + i * st, y);
+  }
+
+  const vB = bands.bass * visGain;
+  const vM = bands.mid  * visGain;
+  const amp = 0.80 + vB * 1.35 + beatPulse * 0.30;
+  const levels = [-0.72, -0.36, 0.36, 0.72];
+
+  for (let li = 0; li < levels.length; li++) {
+    const L = levels[li] * amp;
+    ctx.beginPath();
+    for (let j = 0; j < N; j++) {
+      const y0 = -1 + j * st;
+      const r0 = j * gw, r1 = (j + 1) * gw;
+      for (let i = 0; i < N; i++) {
+        const x0 = -1 + i * st;
+        const v0 = cgrid[r0 + i], v1 = cgrid[r0 + i + 1];
+        const v2 = cgrid[r1 + i + 1], v3 = cgrid[r1 + i];
+        let idx = 0;
+        if (v0 > L) idx |= 1;
+        if (v1 > L) idx |= 2;
+        if (v2 > L) idx |= 4;
+        if (v3 > L) idx |= 8;
+        if (idx === 0 || idx === 15) continue;
+        const segs = CASES[idx];
+        for (let s = 0; s < segs.length; s++) {
+          const ea = segs[s][0], eb = segs[s][1];
+          edgePoint(ea, x0, y0, st, v0, v1, v2, v3, L);
+          const ax = _ex, ay = _ey;
+          edgePoint(eb, x0, y0, st, v0, v1, v2, v3, L);
+          ctx.moveTo(CX + ax * SCALE, CY + ay * SCALE);
+          ctx.lineTo(CX + _ex * SCALE, CY + _ey * SCALE);
+        }
+      }
+    }
+    ctx.strokeStyle = LUT[Math.min(LUT_N - 1, ((li / (levels.length - 1)) * (LUT_N - 1)) | 0)];
+    ctx.lineWidth = 1.0 + vM * 3.8 + beatPulse * 1.4;
+    ctx.stroke();
+  }
+}
+
+/* =========================================================
+   FLUJO (modo 2) — líneas de campo fluyendo
+   ========================================================= */
+const FLOW_MAX = 3000;
+const flX   = new Float32Array(FLOW_MAX);
+const flY   = new Float32Array(FLOW_MAX);
+const flPX  = new Float32Array(FLOW_MAX);
+const flPY  = new Float32Array(FLOW_MAX);
+const flPh  = new Float32Array(FLOW_MAX);
+const flAge = new Float32Array(FLOW_MAX);
+const flLife= new Float32Array(FLOW_MAX);
+const flowBuckets = [];
+for (let i = 0; i < LUT_N; i++) flowBuckets.push([]);
+
+function spawnFlow(i) {
+  if (S.shape === 'radial') {
+    const a = Math.random() * Math.PI * 2;
+    const r = Math.sqrt(Math.random()) * 0.98;
+    flX[i] = Math.cos(a) * r;
+    flY[i] = Math.sin(a) * r;
+  } else {
+    flX[i] = Math.random() * 2 - 1;
+    flY[i] = Math.random() * 2 - 1;
+  }
+  flPX[i] = flX[i];
+  flPY[i] = flY[i];
+  flPh[i] = Math.random() * Math.PI * 2;
+  flAge[i] = 0;
+  flLife[i] = 1.0 + Math.random() * 2.2;
+}
+
+function respawnFlowAll() {
+  for (let i = 0; i < FLOW_MAX; i++) spawnFlow(i);
+}
+
+function drawFlow(dt) {
+  const N = Math.min(FLOW_MAX, 800 + Math.floor(S.count * 0.4));
+  const h = 0.004, inv2h = 1 / (2 * h);
+  const radial = S.shape === 'radial';
+
+  const vB = bands.bass * visGain;
+  const vL = bands.low  * visGain;
+  const vM = bands.mid  * visGain;
+  const vH = bands.high * visGain;
+  const vA = bands.air  * visGain;
+
+  const speed = 0.40 + vB * 2.8 + vL * 0.8 + beatPulse * 1.8;
+  const swirl = 0.15 + vH * 1.4 + vA * 1.0 + vM * 0.3 + beatPulse * 0.5;
+  const wobAmp = 0.020 + vM * 0.045 + beatPulse * 0.030;
+  const tNow = S.time;
+
+  for (let b = 0; b < LUT_N; b++) flowBuckets[b].length = 0;
+
+  const lineW = 0.9 + vB * 1.4 + vM * 0.5 + beatPulse * 1.1;
+
+  for (let i = 0; i < N; i++) {
+    let x = flX[i], y = flY[i];
+
+    const f  = field(x, y);
+    const gx = (field(x + h, y) - field(x - h, y)) * inv2h;
+    const gy = (field(x, y + h) - field(x, y - h)) * inv2h;
+    const gm = Math.sqrt(gx * gx + gy * gy) + 1e-5;
+    const ux = gx / gm, uy = gy / gm;
+    const k  = f > 1 ? 1 : f < -1 ? -1 : f;
+
+    let vx = -ux * k * speed - uy * swirl;
+    let vy = -uy * k * speed + ux * swirl;
+    const ph  = flPh[i] + tNow * (1.8 + vH * 2.5);
+    vx += Math.cos(ph) * wobAmp;
+    vy += Math.sin(ph * 1.3) * wobAmp;
+
+    const nx = x + vx * dt;
+    const ny = y + vy * dt;
+
+    flAge[i] += dt;
+
+    let out;
+    if (radial) out = (nx * nx + ny * ny) > 1;
+    else        out = (nx < -1 || nx > 1 || ny < -1 || ny > 1);
+
+    if (out || flAge[i] > flLife[i]) {
+      spawnFlow(i);
+      continue;
+    }
+
+    flPX[i] = x; flPY[i] = y;
+    flX[i]  = nx; flY[i]  = ny;
+
+    let cval = (nx * 0.5 + 0.5) * 0.65 + (ny * 0.5 + 0.5) * 0.35;
+    if (cval < 0) cval = 0; else if (cval > 1) cval = 1;
+    flowBuckets[(cval * (LUT_N - 1)) | 0].push(i);
+  }
+
+  ctx.lineCap = 'round';
+  ctx.lineWidth = lineW;
+  for (let b = 0; b < LUT_N; b++) {
+    const arr = flowBuckets[b];
+    if (arr.length === 0) continue;
+    ctx.strokeStyle = LUT[b];
+    ctx.beginPath();
+    for (let j = 0; j < arr.length; j++) {
+      const i = arr[j];
+      ctx.moveTo(CX + flPX[i] * SCALE, CY + flPY[i] * SCALE);
+      ctx.lineTo(CX + flX[i]  * SCALE, CY + flY[i]  * SCALE);
+    }
+    ctx.stroke();
+  }
+  ctx.lineCap = 'butt';
+}
+
+/* =========================================================
+   TÚNEL (modo 3) — anillos en perspectiva infinita
+   ========================================================= */
+function drawTunnel(dt) {
+  const vB = bands.bass * visGain;
+  const vM = bands.mid  * visGain;
+  const vH = bands.high * visGain;
+  const vA = bands.air  * visGain;
+
+  const t = S.time;
+  const speed     = 0.10 + vB * 0.45 + beatPulse * 0.20;
+  const rings     = 50;
+  const maxR      = Math.hypot(W, H) * 0.62;
+  const sides     = 8;
+  const twistBase = 0.3 + vM * 0.8;
+  const wobbleAmp = 6 + vH * 25 + vA * 12;
+  const wobbleFreq = 1.4 + vH * 2.0;
+
+  ctx.lineJoin = 'round';
+
+  for (let i = 0; i < rings; i++) {
+    const prog = ((i / rings) + t * speed) % 1;
+    if (prog < 0.015) continue;
+
+    const scale  = Math.pow(prog, 1.35);
+    const radius = scale * maxR;
+
+    const alpha = Math.sin(prog * Math.PI) * (0.55 + vB * 0.35);
+    if (alpha < 0.03) continue;
+
+    const rot = t * (0.2 + vM * 0.6) + prog * twistBase * 3 + i * 0.12;
+
+    const colIdx = Math.max(0, Math.min(LUT_N - 1, Math.floor((1 - prog) * (LUT_N - 1))));
+    ctx.strokeStyle = LUT[colIdx];
+    ctx.globalAlpha = alpha;
+    ctx.lineWidth = 0.6 + scale * 2.5 + vB * 1.5;
+
+    const wPhase = t * 2.5 + i * 0.35;
+
+    ctx.beginPath();
+    for (let k = 0; k <= sides; k++) {
+      const a  = (k / sides) * Math.PI * 2 + rot;
+      const w  = wobbleAmp * Math.sin(k * wobbleFreq + wPhase) * scale;
+      const rr = radius + w;
+      const x  = CX + Math.cos(a) * rr;
+      const y  = CY + Math.sin(a) * rr;
+      if (k === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.lineJoin = 'miter';
+}
+
+/* =========================================================
+   ESPECTRO RADIAL (modo 4)
+   ========================================================= */
+function drawSpectrum(dt) {
+  const bins = 96;
+  const vB = bands.bass * visGain;
+  const vM = bands.mid  * visGain;
+  const r0 = SCALE * (0.20 + vB * 0.04);
+  const maxLen = SCALE * (0.85 + vB * 0.22);
+  const rotBase = S.time * (0.12 + vM * 0.5);
+
+  for (let i = 0; i < bins; i++) {
+    const binIdx = Math.min(SPEC_N - 1, 2 + Math.floor(Math.pow(i / bins, 1.6) * 460));
+    const v = Math.pow(spec[binIdx] / 255, 1.25) * (1.0 + vB * 0.6);
+    const len = r0 + v * maxLen;
+    const a = (i / bins) * Math.PI * 2 - Math.PI * 0.5 + rotBase;
+    const ca = Math.cos(a), sa = Math.sin(a);
+    ctx.strokeStyle = LUT[Math.min(LUT_N - 1, (v * (LUT_N - 1)) | 0)];
+    ctx.lineWidth = 1.6 + v * 5.0 + beatPulse * 1.5;
+    ctx.beginPath();
+    ctx.moveTo(CX + ca * r0, CY + sa * r0);
+    ctx.lineTo(CX + ca * len, CY + sa * len);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(CX - ca * r0, CY - sa * r0);
+    ctx.lineTo(CX - ca * len, CY - sa * len);
+    ctx.stroke();
+  }
+
+  ctx.beginPath();
+  ctx.arc(CX, CY, r0 * (0.94 + vB * 0.20), 0, Math.PI * 2);
+  ctx.strokeStyle = LUT[LUT_N - 1];
+  ctx.lineWidth = 1 + vB * 4.0;
+  ctx.globalAlpha = Math.min(1, 0.55 + vB * 0.4);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+/* =========================================================
+   RIPPLES
+   ========================================================= */
+function drawRipples(dt) {
+  for (let i = ripples.length - 1; i >= 0; i--) {
+    const rp = ripples[i];
+    rp.t += dt;
+    const life = rp.t / 1.1;
+    if (life >= 1) { ripples.splice(i, 1); continue; }
+    const ease = 1 - Math.pow(1 - life, 2.2);
+    const rad = SCALE * (0.18 + ease * 1.5);
+    const alpha = (1 - life) * rp.str * 0.42;
+    ctx.beginPath();
+    ctx.arc(CX, CY, rad, 0, Math.PI * 2);
+    ctx.strokeStyle = LUT[LUT_N - 1];
+    ctx.globalAlpha = alpha;
+    ctx.lineWidth = 1.5 + (1 - life) * 9;
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* =========================================================
+   EFECTOS "PICANTE"
+   ========================================================= */
+function applyBloom() {
+  bloomCtx.clearRect(0, 0, bloomCv.width, bloomCv.height);
+  bloomCtx.filter = 'blur(5px)';
+  bloomCtx.drawImage(cv, 0, 0, bloomCv.width, bloomCv.height);
+  bloomCtx.filter = 'none';
+
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.55;
+  ctx.drawImage(bloomCv, 0, 0, W, H);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function applyKaleidoscope(segments) {
+  snapCtx.clearRect(0, 0, snapCv.width, snapCv.height);
+  snapCtx.drawImage(cv, 0, 0);
+
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.save();
+  ctx.translate(CX, CY);
+
+  const R = Math.max(W, H) * 1.5;
+  const step = Math.PI * 2 / segments;
+
+  for (let i = 0; i < segments; i++) {
+    ctx.save();
+    ctx.rotate(i * step);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, R, -step / 2, step / 2);
+    ctx.closePath();
+    ctx.clip();
+    if (i % 2 === 1) ctx.scale(1, -1);
+    ctx.drawImage(snapCv, -CX, -CY, W, H);
+    ctx.restore();
+  }
+  ctx.restore();
+
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 1;
+}
+
+function drawBeatRays() {
+  const rays = 24;
+  const rot = S.time * 0.3;
+  const baseR = SCALE * 0.3;
+  const maxR = Math.hypot(W, H) * 0.55;
+  const len = baseR + (maxR - baseR) * beatPulse;
+
+  ctx.save();
+  ctx.translate(CX, CY);
+  ctx.rotate(rot);
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < rays; i++) {
+    const a = i * Math.PI * 2 / rays;
+    const ca = Math.cos(a), sa = Math.sin(a);
+    ctx.strokeStyle = LUT[(i * 3) % LUT_N];
+    ctx.globalAlpha = beatPulse * 0.5;
+    ctx.lineWidth = 1 + beatPulse * 2.2;
+    ctx.beginPath();
+    ctx.moveTo(ca * baseR, sa * baseR);
+    ctx.lineTo(ca * len, sa * len);
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function drawBeatGhost() {
+  snapCtx.clearRect(0, 0, snapCv.width, snapCv.height);
+  snapCtx.drawImage(cv, 0, 0);
+  const amt = beatPulse * 12;
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = beatPulse * 0.18;
+  ctx.drawImage(snapCv, -amt, 0, W, H);
+  ctx.drawImage(snapCv,  amt, 0, W, H);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function drawBeatFlash() {
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = 'rgba(255,255,255,' + (beatPulse * 0.06).toFixed(3) + ')';
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function applyBeatShake() {
+  snapCtx.clearRect(0, 0, snapCv.width, snapCv.height);
+  snapCtx.drawImage(cv, 0, 0);
+  const amt = beatPulse * 5;
+  const ox = (Math.random() - 0.5) * amt;
+  const oy = (Math.random() - 0.5) * amt;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+  ctx.drawImage(snapCv, ox - 6, oy - 6, W + 12, H + 12);
+}
+
+let _vigGrad = null, _vigW = -1, _vigH = -1;
+function drawVignette() {
+  if (_vigW !== W || _vigH !== H || !_vigGrad) {
+    _vigGrad = ctx.createRadialGradient(
+      CX, CY, Math.min(W, H) * 0.35,
+      CX, CY, Math.max(W, H) * 0.78
+    );
+    _vigGrad.addColorStop(0, 'rgba(0,0,0,0)');
+    _vigGrad.addColorStop(0.65, 'rgba(0,0,0,0.18)');
+    _vigGrad.addColorStop(1, 'rgba(0,0,0,0.62)');
+    _vigW = W; _vigH = H;
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = _vigGrad;
+  ctx.fillRect(0, 0, W, H);
+}
+
+/* =========================================================
+   PARÁMETROS / AUTO
+   ========================================================= */
+let autoTimer = 0;
+
+function updateParams(dt) {
+  const vM = bands.mid * visGain;
+  const vB = bands.bass * visGain;
+  S.phase += S.phaseSpeed * dt * (0.5 + vM * 3.2 + vB * 1.2 + beatPulse * 1.8);
+  if (S.phase > Math.PI * 2) S.phase -= Math.PI * 2;
+
+  if (S.auto) {
+    autoTimer -= dt;
+    if (autoTimer <= 0 || (beatPulse > 0.93 && Math.random() < 0.28)) {
+      S.nT = 1 + Math.floor(Math.random() * 9);
+      S.mT = 1 + Math.floor(Math.random() * 9);
+      autoTimer = 2.5 + Math.random() * 4.5;
+    }
+  }
+
+  const k = Math.min(1, dt * 1.6);
+  S.n += (S.nT - S.n) * k;
+  S.m += (S.mT - S.m) * k;
+
+  F_n = S.n; F_m = S.m; F_a = S.a; F_b = S.b;
+  F_ph = S.phase;
+  F_shape = S.shape === 'radial' ? 1 : 0;
+}
+
+/* =========================================================
+   RENDER
+   ========================================================= */
+function render(dt) {
+  const trail = S.trail * (0.85 + bands.bass * 0.35);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = 'rgba(0,0,0,' + trail.toFixed(3) + ')';
+  ctx.fillRect(0, 0, W, H);
+
+  const origScale = SCALE;
+  SCALE = origScale * (1 + beatPulse * 0.025);
+
+  ctx.globalCompositeOperation = 'lighter';
+  switch (S.mode) {
+    case 0: drawParticles(dt); break;
+    case 1: drawContours(dt);  break;
+    case 2: drawFlow(dt);      break;
+    case 3: drawTunnel(dt);    break;
+    case 4: drawSpectrum(dt);  break;
+  }
+  drawRipples(dt);
+  ctx.globalCompositeOperation = 'source-over';
+
+  SCALE = origScale;
+
+  if (S.kSegments > 0) applyKaleidoscope(S.kSegments);
+  if (S.bloom) applyBloom();
+
+  if (S.beatFx) {
+    if (beatPulse > 0.35) drawBeatRays();
+    if (beatPulse > 0.40) drawBeatGhost();
+    if (beatPulse > 0.25) drawBeatFlash();
+    if (beatPulse > 0.50) applyBeatShake();
+  }
+
+  drawVignette();
+
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+/* =========================================================
+   LOOP
+   ========================================================= */
+let last = performance.now();
+let hudTick = 0;
+
+function loop(now) {
+  requestAnimationFrame(loop);
+
+  let dt = (now - last) / 1000;
+  last = now;
+  if (dt > 0.06) dt = 0.06;
+  if (dt < 0) dt = 0;
+
+  if (!S.paused) S.time += dt;
+
+  updateAudio(dt, S.time);
+  if (!S.paused) updateParams(dt);
+  else { F_n = S.n; F_m = S.m; F_a = S.a; F_b = S.b; F_ph = S.phase; F_shape = S.shape === 'radial' ? 1 : 0; }
+
+  render(dt);
+
+  if (++hudTick % 4 === 0) updateHUD();
+}
+
+/* =========================================================
+   HUD
+   ========================================================= */
+const statusEl = document.getElementById('status');
+const audioModeEl = document.getElementById('audioMode');
+const metersEls = [0,1,2,3,4].map(i => document.getElementById('mb' + i));
+
+function updateHUD() {
+  const bloomTag = S.bloom ? '<b>ON</b>' : '<span class="off">off</span>';
+  const fxTag    = S.beatFx ? '<b>ON</b>' : '<span class="off">off</span>';
+  const kalTag   = S.kSegments > 0 ? '<b>' + S.kSegments + '</b>' : '<span class="off">off</span>';
+
+  statusEl.innerHTML =
+    'MODO <b>' + (S.mode + 1) + '</b> · <b>' + MODE_NAMES[S.mode] + '</b><br>' +
+    'n <b>' + S.n.toFixed(1) + '</b> m <b>' + S.m.toFixed(1) + '</b> · ' +
+    (S.shape === 'rect' ? 'RECT' : 'RADIAL') + ' · ' + zoomMode.toUpperCase() +
+    (S.auto ? ' <i>AUTO</i>' : '') + (S.paused ? ' <i>PAUSA</i>' : '') + '<br>' +
+    'PALETA <b>' + PALETTES[S.palette].name + '</b> · GAIN <b>×' + masterGain.toFixed(2) + '</b><br>' +
+    'BLOOM ' + bloomTag + ' · KAL ' + kalTag + ' · FX ' + fxTag;
+
+  const keys = ['bass','low','mid','high','air'];
+  for (let i = 0; i < 5; i++) {
+    const shown = Math.tanh(bands[keys[i]] * masterGain * 0.9);
+    metersEls[i].style.width = (shown * 100).toFixed(1) + '%';
+  }
+}
+
+function updateAudioLabel() {
+  audioModeEl.innerHTML = audioMode === 'mic'
+    ? 'AUDIO · <b>MICRÓFONO (AGC)</b>'
+    : 'AUDIO · <b>SINTÉTICO</b>';
+}
+
+/* =========================================================
+   ACCIONES
+   ========================================================= */
+function setMode(m) {
+  S.mode = ((m % 5) + 5) % 5;
+  clearCanvas();
+}
+
+function nextPalette() {
+  S.palette = (S.palette + 1) % PALETTES.length;
+  buildLUT();
+}
+
+function burst() {
+  for (let i = 0; i < S.count; i++) {
+    pX[i] = Math.random() * 2 - 1;
+    pY[i] = Math.random() * 2 - 1;
+    pPhase[i] = Math.random() * Math.PI * 2;
+  }
+  beatPulse = 1;
+  ripples.push({ t: 0, str: 1.2 });
+}
+
+function randomize() {
+  S.nT = 1 + Math.floor(Math.random() * 10);
+  S.mT = 1 + Math.floor(Math.random() * 10);
+  S.a = Math.random() < 0.5 ? 1 : -1;
+  S.b = Math.random() < 0.5 ? 1 : -1;
+  S.palette = Math.floor(Math.random() * PALETTES.length);
+  buildLUT();
+  respawnAll();
+  respawnFlowAll();
+}
+
+function resetAll() {
+  S.n = 3; S.m = 5; S.nT = 3; S.mT = 5;
+  S.a = 1; S.b = -1;
+  S.phase = 0;
+  S.auto = true;
+  S.shape = 'rect';
+  S.palette = 0;
+  S.count = 3000;
+  S.trail = 0.13;
+  S.mode = 0;
+  S.bloom = true;
+  S.kSegments = 0;
+  S.beatFx = false;
+  masterGain = 1.35;
+  zoomMode = 'fill';
+  ripples.length = 0;
+  updateScale();
+  buildLUT();
+  respawnAll();
+  respawnFlowAll();
+  clearCanvas();
+}
+
+function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  } else {
+    document.exitFullscreen().catch(() => {});
+  }
+}
+
+function toggleHUD() {
+  S.hud = !S.hud;
+  document.body.classList.toggle('hud-hidden', !S.hud);
+  document.querySelectorAll('.ui').forEach(el => {
+    el.classList.toggle('hidden', !S.hud);
+    if (!S.hud) {
+      el.style.visibility = 'hidden';
+      el.style.opacity = '0';
+    } else {
+      el.style.visibility = '';
+      el.style.opacity = '';
+    }
+  });
+}
+
+function screenshot() {
+  const a = document.createElement('a');
+  a.download = 'cymatics_' + Date.now() + '.png';
+  a.href = cv.toDataURL('image/png');
+  a.click();
+}
+
+/* =========================================================
+   TECLADO
+   ========================================================= */
+const startEl = document.getElementById('start');
+let started = false;
+
+window.addEventListener('keydown', (e) => {
+  if (!started) {
+    started = true;
+    startEl.classList.add('done');
+    setTimeout(() => startEl.remove(), 700);
+  }
+
+  const k = e.key;
+
+  if (k >= '1' && k <= '5') { setMode(parseInt(k, 10) - 1); e.preventDefault(); return; }
+
+  switch (k) {
+    case 'ArrowRight': S.nT = Math.min(16, Math.round(S.nT) + 1); e.preventDefault(); break;
+    case 'ArrowLeft':  S.nT = Math.max(1,  Math.round(S.nT) - 1); e.preventDefault(); break;
+    case 'ArrowUp':    S.mT = Math.min(16, Math.round(S.mT) + 1); e.preventDefault(); break;
+    case 'ArrowDown':  S.mT = Math.max(1,  Math.round(S.mT) - 1); e.preventDefault(); break;
+
+    case 'i': case 'I':
+    case ' ':
+    case 'Spacebar':
+    case 'Enter':
+      burst(); e.preventDefault(); break;
+
+    case 'x': case 'X':
+      zoomMode = zoomMode === 'fill' ? 'fit' : 'fill';
+      updateScale(); break;
+
+    case 'a': case 'A': S.auto = !S.auto; break;
+    case 'c': case 'C': nextPalette(); break;
+    case 'l': case 'L': S.bloom = !S.bloom; break;
+
+    case 'k': case 'K': {
+      const idx = K_CYCLE.indexOf(S.kSegments);
+      S.kSegments = K_CYCLE[(idx + 1) % K_CYCLE.length];
+      clearCanvas();
+      break;
+    }
+
+    case 'j': case 'J': S.beatFx = !S.beatFx; break;
+
+    case 'g': case 'G':
+      S.shape = S.shape === 'rect' ? 'radial' : 'rect';
+      updateScale();
+      respawnAll(); respawnFlowAll(); clearCanvas(); break;
+
+    case 't': case 'T':
+      S.trail = S.trail <= 0.085 ? 0.13 : S.trail <= 0.135 ? 0.22 : S.trail <= 0.225 ? 0.32 : 0.06;
+      break;
+
+    case 'b': case 'B': burst(); break;
+    case 'm': case 'M': toggleMic(); break;
+    case 'f': case 'F': toggleFullscreen(); break;
+    case 'h': case 'H': toggleHUD(); break;
+    case 'p': case 'P': S.paused = !S.paused; break;
+    case 'r': case 'R': randomize(); clearCanvas(); break;
+    case 's': case 'S': screenshot(); break;
+    case '0': resetAll(); break;
+
+    case '[': masterGain = Math.max(0.3, +(masterGain - 0.15).toFixed(2)); break;
+    case ']': masterGain = Math.min(4.0, +(masterGain + 0.15).toFixed(2)); break;
+    case '+': case '=': S.count = Math.min(MAXN, S.count + 500); break;
+    case '-': case '_': S.count = Math.max(500, S.count - 500); break;
+  }
+}, { passive: false });
+
+window.addEventListener('pointerdown', () => {
+  if (!started) {
+    started = true;
+    startEl.classList.add('done');
+    setTimeout(() => startEl.remove(), 700);
+  }
+});
+
+/* =========================================================
+   INIT
+   ========================================================= */
+buildLUT();
+resize();
+respawnAll();
+respawnFlowAll();
+updateAudioLabel();
+updateHUD();
+requestAnimationFrame(loop);
+
+})();
+</script>
+</body>
+</html>

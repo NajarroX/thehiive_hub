@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CLI Visual Hub</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Custom Fonts & Tailwind Configuration -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&display=swap" rel="stylesheet">
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            mono: ['"Fira Code"', 'monospace'],
+          },
+          colors: {
+            terminal: {
+              bg: '#0a0d0e',
+              card: '#111618',
+              green: '#00ff66',
+              dim: '#008f39',
+              accent: '#33ff88',
+              muted: '#4a6b57'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Custom CRT Scanline & Glow Effects */
+    body {
+      background-color: #0a0d0e;
+      color: #00ff66;
+      font-family: 'Fira Code', monospace;
+      text-shadow: 0 0 5px rgba(0, 255, 102, 0.4);
+    }
+
+    /* Subtle CRT Overlay */
+    .crt::after {
+      content: " ";
+      display: block;
+      position: fixed;
+      top: 0; left: 0; bottom: 0; right: 0;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+      z-index: 50;
+      background-size: 100% 3px, 6px 100%;
+      pointer-events: none;
+    }
+
+    /* Custom Blinking Cursor */
+    .cursor-blink::after {
+      content: "█";
+      animation: blink 1s infinite;
+      margin-left: 2px;
+      color: #00ff66;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    /* Custom scrollbar for CLI vibe */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0a0d0e;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #008f39;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="crt min-h-screen flex flex-col justify-between items-center p-4 sm:p-6 overflow-x-hidden selection:bg-terminal-dim selection:text-white">
+
+  <!-- Terminal Window Container -->
+  <main class="w-full max-w-2xl mt-6 sm:mt-12 bg-terminal-card border border-terminal-dim/50 rounded-lg shadow-2xl shadow-terminal-green/10 overflow-hidden flex flex-col">
+    
+    <!-- Terminal Header Bar -->
+    <header class="bg-black/60 border-b border-terminal-dim/40 px-4 py-3 flex items-center justify-between select-none">
+      <div class="flex items-center space-x-2">
+        <span class="w-3 h-3 rounded-full bg-red-500/80 inline-block"></span>
+        <span class="w-3 h-3 rounded-full bg-yellow-500/80 inline-block"></span>
+        <span class="w-3 h-3 rounded-full bg-green-500/80 inline-block"></span>
+      </div>
+      <div class="text-xs text-terminal-muted tracking-widest uppercase">system_v1.0.4 -- bash</div>
+      <div class="text-xs text-terminal-dim font-bold">ONLINE</div>
+    </header>
+
+    <!-- Terminal Main Body -->
+    <section class="p-6 sm:p-10 flex flex-col items-center text-center space-y-8">
+      
+      <!-- LOGO CONTAINER -->
+      <!-- Busca 'assets/logo.png'. Si no existe la imagen, activa el fallback SVG automaticamente -->
+      <div class="relative group cursor-pointer">
+        <div class="absolute -inset-1 bg-gradient-to-r from-terminal-green to-terminal-dim rounded-xl blur opacity-25 group-hover:opacity-60 transition duration-500"></div>
+        <div class="relative w-32 h-32 sm:w-40 sm:h-40 rounded-xl bg-black border border-terminal-dim flex items-center justify-center p-3 overflow-hidden">
+          <img 
+            id="cli-logo" 
+            src="assets/logo.png" 
+            alt="Colmena Logo" 
+            class="w-full h-full object-contain filter drop-shadow-[0_0_8px_rgba(0,255,102,0.6)]"
+            onerror="loadFallbackLogo(this)"
+          />
+        </div>
+      </div>
+
+      <!-- SUBTITLE / DESCRIPTION (Efecto Matrix / Typewriter) -->
+      <div class="w-full max-w-lg min-h-[3rem] flex items-center justify-center">
+        <p id="subtitle-text" class="text-sm sm:text-base text-terminal-accent tracking-wide leading-relaxed font-medium">
+          <!-- Text dynamically loaded via JS -->
+        </p>
+      </div>
+
+      <!-- DIVIDER -->
+      <div class="w-full border-t border-dashed border-terminal-dim/40 my-2"></div>
+
+      <!-- LINKS CONTAINER (Aparición secuencial interactiva) -->
+      <nav class="w-full space-y-3 sm:space-y-4" aria-label="Visual links">
+        <div id="links-wrapper" class="flex flex-col space-y-3 w-full">
+          <!-- Los enlaces se generarán dinámicamente con JS para aplicar el efecto -->
+        </div>
+      </nav>
+
+    </section>
+
+    <!-- Terminal Footer Status Bar -->
+    <footer class="bg-black/40 border-t border-terminal-dim/30 px-4 py-2 text-xs text-terminal-muted flex flex-wrap justify-between items-center gap-2">
+      <span id="system-time">SYS_TIME: --:--:--</span>
+      <span>STATUS: 200 OK</span>
+    </footer>
+  </main>
+
+  <!-- Credit / Info minimal footer -->
+  <footer class="mt-8 text-xs text-terminal-muted text-center">
+    <p>PRESS <span class="text-terminal-green">[TAB]</span> TO NAVIGATE | <span class="text-terminal-green">[ENTER]</span> TO EXECUTE</p>
+  </footer>
+
+  <!-- SCRIPT LOGIC -->
+  <script>
+    // ==========================================
+    // CONFIGURACIÓN DE LINKS Y TEXTOS (Fácil de editar)
+    // ==========================================
+    const SUBTITLE_TEXT = "Hub de visuales creados por y para la colmena.";
+    
+    // Cambia aquí los nombres y URLs de tus visuales
+    const VISUAL_LINKS = [
+      { text: "Visual 1", url: "cymatics.html" },
+      { text: "Visual 2", url: "colmena.html" },
+      { text: "Visual 3", url: "visual-3" },
+      { text: "Visual 4", url: "visual-4" },
+      { text: "Visual 5", url: "visual-5" }
+    ];
+
+    const MATRIX_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*<>[]{}";
+
+    // Fallback por si assets/logo.png aún no existe
+    function loadFallbackLogo(imgElement) {
+      // Reemplaza con un SVG de icono de colmena / terminal en verde neón
+      const svgFallback = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="%2300ff66" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21l-8-4.5v-9L12 3l8 4.5v9L12 21zM12 3v9m0 9v-9m0 0l8-4.5M12 12L4 7.5" /></svg>`;
+      imgElement.src = svgFallback;
+      imgElement.onerror = null; // Evita loop infinito
+    }
+
+    // EFECTO DE TEXTO RANDOM / SCRAMBLE + TYPEWRITER
+    function scrambleTypewriter(element, targetText, duration = 800, onComplete = null) {
+      return new Promise((resolve) => {
+        let currentIter = 0;
+        const totalSteps = targetText.length;
+        const stepTime = duration / totalSteps;
+
+        element.classList.add('cursor-blink');
+
+        const interval = setInterval(() => {
+          let displayedText = targetText.substring(0, currentIter);
+          
+          // Agrega caracteres aleatorios estilo hack para el resto del texto
+          if (currentIter < totalSteps) {
+            const randomChar = MATRIX_CHARS[Math.floor(Math.random() * MATRIX_CHARS.length)];
+            displayedText += randomChar;
+          }
+
+          element.textContent = displayedText;
+          currentIter++;
+
+          if (currentIter > totalSteps) {
+            clearInterval(interval);
+            element.textContent = targetText;
+            element.classList.remove('cursor-blink');
+            if (onComplete) onComplete();
+            resolve();
+          }
+        }, Math.max(25, stepTime));
+      });
+    }
+
+    // Inicializar reloj del sistema
+    function updateClock() {
+      const timeElement = document.getElementById('system-time');
+      if (timeElement) {
+        const now = new Date();
+        timeElement.textContent = `SYS_TIME: ${now.toTimeString().split(' ')[0]}`;
+      }
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // RENDERIZADO SECUENCIAL AL CARGAR LA PÁGINA
+    window.addEventListener('DOMContentLoaded', async () => {
+      const subtitleEl = document.getElementById('subtitle-text');
+      const linksWrapper = document.getElementById('links-wrapper');
+
+      // 1. Efecto en el subtítulo
+      await scrambleTypewriter(subtitleEl, SUBTITLE_TEXT, 1200);
+
+      // 2. Renderizar enlaces secuencialmente con el mismo efecto
+      for (let i = 0; i < VISUAL_LINKS.length; i++) {
+        const linkData = VISUAL_LINKS[i];
+
+        // Crear elemento link
+        const a = document.createElement('a');
+        a.href = linkData.url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.className = `
+          group flex items-center justify-between p-3 sm:p-4 rounded border border-terminal-dim/30 
+          bg-black/50 hover:bg-terminal-dim/20 hover:border-terminal-green 
+          transition-all duration-200 text-left font-mono focus:outline-none focus:ring-1 focus:ring-terminal-green
+        `;
+
+        // Prompt symbol + Text Container
+        a.innerHTML = `
+          <div class="flex items-center space-x-3">
+            <span class="text-terminal-dim group-hover:text-terminal-green font-bold">&gt;</span>
+            <span class="link-text text-sm sm:text-base font-semibold tracking-wide"></span>
+          </div>
+          <span class="text-xs text-terminal-muted group-hover:text-terminal-accent transition-colors">
+            [ENTER ↗]
+          </span>
+        `;
+
+        linksWrapper.appendChild(a);
+
+        const textSpan = a.querySelector('.link-text');
+        // Efecto individual por link
+        await scrambleTypewriter(textSpan, linkData.text, 350);
+      }
+    });
+  </script>
+</body>
+</html>

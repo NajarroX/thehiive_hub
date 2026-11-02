@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Visual Engine - Najarro X</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <style>
+        :root {
+            --bg: #ffffff;
+            --fg: #000000;
+            --ui-bg: rgba(255, 255, 255, 0.9);
+            --ui-border: rgba(0, 0, 0, 0.2);
+            --accent: #ff0000;
+        }
+
+        body.night-mode {
+            --bg: #000000;
+            --fg: #ffffff;
+            --ui-bg: rgba(0, 0, 0, 0.85);
+            --ui-border: rgba(255, 255, 255, 0.2);
+            --accent: #00ffcc;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent; /* Evita destellos azules en móviles */
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg);
+            color: var(--fg);
+            overflow: hidden;
+            transition: background-color 0.3s ease;
+        }
+
+        #glcanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* Botón Flotante para Menú (Mobile/Desktop) */
+        #ui-toggle {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 45px;
+            height: 45px;
+            background: var(--ui-bg);
+            border: 1px solid var(--ui-border);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            z-index: 20;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            color: var(--fg);
+            backdrop-filter: blur(5px);
+            transition: transform 0.2s;
+        }
+
+        #ui-toggle:active {
+            transform: scale(0.9);
+        }
+
+        #ui-toggle svg {
+            width: 20px;
+            height: 20px;
+            stroke: currentColor;
+            stroke-width: 2;
+        }
+
+        /* Interfaz de Usuario Flotante */
+        #ui-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 320px;
+            background: var(--ui-bg);
+            border: 1px solid var(--ui-border);
+            backdrop-filter: blur(10px);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            border-radius: 6px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: opacity 0.3s ease;
+        }
+
+        .ui-header {
+            padding: 12px 15px;
+            border-bottom: 1px solid var(--ui-border);
+            cursor: grab;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: bold;
+            font-size: 14px;
+            letter-spacing: 1px;
+            touch-action: none; /* Previene scroll nativo al arrastrar en móviles */
+        }
+
+        .ui-header:active { cursor: grabbing; }
+
+        .ui-body {
+            padding: 15px;
+            max-height: 80vh;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        /* Controles Personalizados */
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .control-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* Sliders Adaptados para Touch */
+        .custom-slider {
+            width: 100%;
+            height: 8px; /* Más grueso para touch */
+            background: var(--ui-border);
+            position: relative;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-top: 5px;
+            touch-action: none;
+        }
+        
+        .slider-fill {
+            height: 100%;
+            background: var(--fg);
+            width: 50%;
+            border-radius: 4px;
+            pointer-events: none;
+        }
+
+        .slider-thumb {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 16px; /* Más grande para touch */
+            height: 16px;
+            background: var(--bg);
+            border: 2px solid var(--fg);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+
+        /* Botones */
+        button {
+            background: transparent;
+            color: var(--fg);
+            border: 1px solid var(--fg);
+            padding: 10px;
+            cursor: pointer;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.2s;
+            border-radius: 4px;
+        }
+
+        button:hover {
+            background: var(--fg);
+            color: var(--bg);
+        }
+
+        button.active {
+            background: var(--accent);
+            color: var(--bg);
+            border-color: var(--accent);
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: gray;
+            display: inline-block;
+        }
+        .status-indicator.active { background: #00ff00; }
+        
+        #hidden-ascii-canvas { display: none; }
+        
+        .section-title {
+            font-size: 10px;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-top: 10px;
+            border-bottom: 1px dashed var(--ui-border);
+            padding-bottom: 3px;
+        }
+
+        /* RESPONSIVE DESIGN: Móviles y Tablets */
+        @media (max-width: 768px) {
+            #ui-panel {
+                width: calc(100% - 40px);
+                max-width: 400px;
+                left: 20px !important; /* Forza posicionamiento inicial en móviles */
+                top: 20px;
+                max-height: calc(100vh - 90px); /* Deja espacio para el botón toggle */
+            }
+            .ui-body {
+                gap: 20px; /* Más espacio para evitar toques accidentales */
+            }
+            button {
+                padding: 14px;
+                font-size: 12px;
+            }
+            .custom-slider {
+                height: 12px;
+            }
+            .slider-thumb {
+                width: 22px;
+                height: 22px;
+            }
+        }
+    </style>
+</head>
+<body class="night-mode">
+
+    <canvas id="glcanvas"></canvas>
+    <canvas id="hidden-ascii-canvas" width="512" height="64"></canvas>
+
+    <div id="ui-toggle" title="Mostrar/Ocultar Menú (H o Tab)">
+        <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+    </div>
+
+    <div id="ui-panel">
+        <div class="ui-header" id="ui-drag-handle">
+            <span>NX / CONTROL</span>
+            <span id="midi-status" class="status-indicator" title="MIDI Activity"></span>
+        </div>
+        <div class="ui-body">
+            
+            <div class="control-group" style="flex-direction: row; gap: 5px;">
+                <button id="btn-theme" style="flex: 1;">Tema</button>
+                <button id="btn-monitor2" style="flex: 1;">Monitor 2</button>
+                <button id="btn-fullscreen" style="flex: 1;">Full</button>
+            </div>
+
+            <hr style="width: 100%; border: 0.5px solid var(--ui-border);">
+
+            <div class="control-group">
+                <button id="btn-audio" class="">Activar Audio Reactividad</button>
+            </div>
+
+            <div class="section-title">Base Motor Engine</div>
+
+            <div class="control-group">
+                <div class="control-label"><span>Complejidad (Hex)</span><span id="val-scale">5.0</span></div>
+                <div class="custom-slider" id="slider-scale" data-min="1" data-max="20" data-val="5">
+                    <div class="slider-fill"></div><div class="slider-thumb"></div>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="control-label"><span>Velocidad de Flujo</span><span id="val-speed">1.0</span></div>
+                <div class="custom-slider" id="slider-speed" data-min="0" data-max="5" data-val="1.0">
+                    <div class="slider-fill"></div><div class="slider-thumb"></div>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="control-label"><span>Sensibilidad Audio</span><span id="val-audio">1.0</span></div>
+                <div class="custom-slider" id="slider-audio" data-min="0" data-max="3" data-val="1.0">
+                    <div class="slider-fill"></div><div class="slider-thumb"></div>
+                </div>
+            </div>
+
+            <div class="section-title">Locuras Visuales FX</div>
+
+            <div class="control-group">
+                <div class="control-label"><span>Rotación Hue</span><span id="val-hue">0.0</span></div>
+                <div class="custom-slider" id="slider-hue" data-min="0" data-max="6.28" data-val="0.0">
+                    <div class="slider-fill"></div><div class="slider-thumb"></div>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="control-label"><span>Simetría (Kaleido)</span><span id="val-kaleido">1.0</span></div>
+                <div class="custom-slider" id="slider-kaleido" data-min="1" data-max="12" data-val="1.0">
+                    <div class="slider-fill"></div><div class="slider-thumb"></div>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="control-label"><span>Intensidad Glitch</span><span id="val-glitch">0.0</span></div>
+                <div class="custom-slider" id="slider-glitch" data-min="0" data-max="2" data-val="0.0">
+                    <div class="slider-fill"></div><div class="slider-thumb"></div>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="control-label"><span>Rotación Global</span><span id="val-rotation">0.0</span></div>
+                <div class="custom-slider" id="slider-rotation" data-min="-3.14" data-max="3.14" data-val="0.0">
+                    <div class="slider-fill"></div><div class="slider-thumb"></div>
+                </div>
+            </div>
+
+            <hr style="width: 100%; border: 0.5px solid var(--ui-border);">
+
+            <div class="control-group">
+                <button id="btn-midi-learn">MIDI Learn: OFF</button>
+            </div>
+
+        </div>
+    </div>
+
+<script>
+/**
+ * GENERADOR DE TEXTURA ASCII
+ */
+function createASCIITexture() {
+    const canvas = document.getElementById('hidden-ascii-canvas');
+    const ctx = canvas.getContext('2d');
+    const chars = [' ', '.', ':', '-', '=', '+', '*', '#', '%', '@'];
+    
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#fff';
+    ctx.font = '48px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    const step = canvas.width / chars.length;
+    chars.forEach((c, i) => {
+        ctx.fillText(c, (i * step) + (step/2), canvas.height/2);
+    });
+    
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.minFilter = THREE.NearestFilter;
+    tex.magFilter = THREE.NearestFilter;
+    return tex;
+}
+
+/**
+ * ESTADO GLOBAL Y PARÁMETROS
+ */
+const AppState = {
+    theme: 'night',
+    params: {
+        scale: 5.0,
+        speed: 1.0,
+        audioSensitivity: 1.0,
+        audioData: 0.0,
+        hue: 0.0,
+        kaleido: 1.0,
+        glitch: 0.0,
+        rotation: 0.0
+    },
+    midiLearnMode: false,
+    activeMidiTarget: null
+};
+
+/**
+ * 1. VISUAL ENGINE (Three.js & GLSL)
+ */
+class VisualEngine {
+    constructor() {
+        this.canvas = document.getElementById('glcanvas');
+        this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, alpha: true });
+        this.renderer.setPixelRatio(window.devicePixelRatio);
+        this.scene = new THREE.Scene();
+        this.camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        this.camera.position.z = 10;
+        
+        this.clock = new THREE.Clock();
+        this.initShader();
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
+    }
+
+    initShader() {
+        this.asciiTex = createASCIITexture();
+        
+        const vertexShader = `
+            varying vec2 vUv;
+            void main() {
+                vUv = uv;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `;
+
+        const fragmentShader = `
+            uniform float u_time;
+            uniform vec2 u_resolution;
+            uniform float u_scale;
+            uniform float u_audio;
+            uniform sampler2D u_ascii;
+            uniform vec3 u_colorBg;
+            uniform vec3 u_colorFg;
+            
+            // Nuevos uniforms FX
+            uniform float u_hue;
+            uniform float u_kaleido;
+            uniform float u_glitch;
+            uniform float u_rotation;
+
+            varying vec2 vUv;
+
+            // Función de rotación 2D
+            mat2 rot(float a) {
+                float s = sin(a), c = cos(a);
+                return mat2(c, -s, s, c);
+            }
+
+            // Rotación Hue (Color)
+            vec3 hueShift(vec3 color, float hue) {
+                const vec3 k = vec3(0.57735, 0.57735, 0.57735);
+                float cosAngle = cos(hue);
+                return vec3(color * cosAngle + cross(k, color) * sin(hue) + k * dot(k, color) * (1.0 - cosAngle));
+            }
+
+            // Coordenadas hexagonales
+            vec4 getHex(vec2 uv) {
+                vec2 r = vec2(1.0, 1.7320508);
+                vec2 h = r * 0.5;
+                vec2 a = mod(uv, r) - h;
+                vec2 b = mod(uv - h, r) - h;
+                vec2 gv = dot(a,a) < dot(b,b) ? a : b;
+                vec2 id = uv - gv;
+                return vec4(gv.x, gv.y, id.x, id.y);
+            }
+
+            float noise(vec2 p) {
+                return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+            }
+
+            void main() {
+                // Centrar y normalizar UVs
+                vec2 uv = (vUv - 0.5) * u_resolution / min(u_resolution.x, u_resolution.y);
+                
+                // Efecto de Rotación Global
+                uv *= rot(u_rotation);
+
+                // Efecto Kaleidoscopio / Simetría
+                if (u_kaleido > 1.5) {
+                    float angle = atan(uv.y, uv.x);
+                    float radius = length(uv);
+                    float segments = floor(u_kaleido);
+                    angle = mod(angle, 6.283185307 / segments);
+                    angle = abs(angle - 3.141592653 / segments);
+                    uv = radius * vec2(cos(angle), sin(angle));
+                }
+
+                // Efecto Glitch analógico
+                if (u_glitch > 0.0) {
+                    float glitchNoise = noise(vec2(u_time * 10.0, uv.y * 10.0));
+                    uv.x += (glitchNoise - 0.5) * u_glitch * 0.5 * sin(u_time * 5.0);
+                }
+                
+                // Distorsión biológica / flujo base
+                vec2 flow = vec2(sin(u_time * 0.5 + uv.y * 2.0), cos(u_time * 0.3 + uv.x * 2.0)) * 0.1;
+                uv += flow * u_audio;
+
+                // Grilla Hexagonal
+                uv *= u_scale;
+                vec4 hex = getHex(uv);
+                
+                // Ondulación por ID de hexágono
+                float n = noise(hex.zw);
+                float wave = sin(u_time * 2.0 + n * 6.28 + u_audio * 2.0) * 0.5 + 0.5;
+                
+                // Contorno del hexágono
+                float hexDist = max(abs(hex.x), dot(abs(hex.xy), vec2(0.5, 0.8660254)));
+                float edge = smoothstep(0.45, 0.5, hexDist);
+                
+                // Mapeo ASCII
+                float intensity = wave * (1.0 - edge);
+                float charIndex = floor(intensity * 9.9);
+                vec2 asciiUv = vec2((charIndex + 0.5) / 10.0, 0.5);
+                vec4 asciiColor = texture2D(u_ascii, asciiUv);
+                
+                // Mezcla de colores original
+                vec3 finalColor = mix(u_colorBg, u_colorFg, asciiColor.r * intensity);
+
+                // Aplicar Rotación de Hue
+                if (u_hue > 0.01) {
+                    finalColor = hueShift(finalColor, u_hue);
+                }
+                
+                gl_FragColor = vec4(finalColor, 1.0);
+            }
+        `;
+
+        this.uniforms = {
+            u_time: { value: 0.0 },
+            u_resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+            u_scale: { value: AppState.params.scale },
+            u_audio: { value: 0.0 },
+            u_ascii: { value: this.asciiTex },
+            u_colorBg: { value: new THREE.Color(AppState.theme === 'night' ? 0x000000 : 0xffffff) },
+            u_colorFg: { value: new THREE.Color(AppState.theme === 'night' ? 0xffffff : 0x000000) },
+            u_hue: { value: AppState.params.hue },
+            u_kaleido: { value: AppState.params.kaleido },
+            u_glitch: { value: AppState.params.glitch },
+            u_rotation: { value: AppState.params.rotation }
+        };
+
+        const geometry = new THREE.PlaneGeometry(30, 30);
+        this.material = new THREE.ShaderMaterial({
+            vertexShader,
+            fragmentShader,
+            uniforms: this.uniforms
+        });
+
+        const plane = new THREE.Mesh(geometry, this.material);
+        this.scene.add(plane);
+    }
+
+    updateTheme() {
+        const isNight = AppState.theme === 'night';
+        this.uniforms.u_colorBg.value.setHex(isNight ? 0x000000 : 0xffffff);
+        this.uniforms.u_colorFg.value.setHex(isNight ? 0xffffff : 0x000000);
+    }
+
+    resize() {
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.uniforms.u_resolution.value.set(window.innerWidth, window.innerHeight);
+        this.camera.aspect = window.innerWidth / window.innerHeight;
+        this.camera.updateProjectionMatrix();
+    }
+
+    render() {
+        this.uniforms.u_time.value += this.clock.getDelta() * AppState.params.speed;
+        
+        this.uniforms.u_scale.value = AppState.params.scale;
+        this.uniforms.u_hue.value = AppState.params.hue;
+        this.uniforms.u_kaleido.value = AppState.params.kaleido;
+        this.uniforms.u_glitch.value = AppState.params.glitch;
+        this.uniforms.u_rotation.value = AppState.params.rotation;
+        
+        let audioInfluence = AppState.params.audioData * AppState.params.audioSensitivity;
+        this.uniforms.u_audio.value += (audioInfluence - this.uniforms.u_audio.value) * 0.1;
+
+        this.renderer.render(this.scene, this.camera);
+    }
+}
+
+/**
+ * 2. AUDIO ANALYZER
+ */
+class AudioAnalyzer {
+    constructor() {
+        this.ctx = null;
+        this.analyser = null;
+        this.dataArray = null;
+        this.active = false;
+    }
+
+    async init() {
+        try {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const source = this.ctx.createMediaStreamSource(stream);
+            this.analyser = this.ctx.createAnalyser();
+            this.analyser.fftSize = 256;
+            source.connect(this.analyser);
+            this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+            this.active = true;
+            document.getElementById('btn-audio').classList.add('active');
+            document.getElementById('btn-audio').innerText = "Audio Activo";
+        } catch (err) {
+            alert("Error al acceder al micrófono. Verifica los permisos.");
+            console.error(err);
+        }
+    }
+
+    update() {
+        if (!this.active) return;
+        this.analyser.getByteFrequencyData(this.dataArray);
+        let sum = 0;
+        for(let i = 0; i < 10; i++) { sum += this.dataArray[i]; }
+        let average = sum / 10;
+        AppState.params.audioData = average / 255.0;
+    }
+}
+
+/**
+ * 3. MIDI MANAGER
+ */
+class MIDIManager {
+    constructor() {
+        this.indicator = document.getElementById('midi-status');
+        this.mappings = {}; 
+        this.init();
+    }
+
+    async init() {
+        if (navigator.requestMIDIAccess) {
+            try {
+                const midiAccess = await navigator.requestMIDIAccess();
+                for (let input of midiAccess.inputs.values()) {
+                    input.onmidimessage = this.onMidiMessage.bind(this);
+                }
+                midiAccess.onstatechange = (e) => console.log("MIDI Status:", e.port.state);
+            } catch (err) {
+                console.log("Web MIDI no soportado o denegado.");
+            }
+        }
+    }
+
+    onMidiMessage(message) {
+        const [command, note, velocity] = message.data;
+        
+        this.indicator.classList.add('active');
+        setTimeout(() => this.indicator.classList.remove('active'), 100);
+
+        if (command >= 176 && command <= 191) {
+            const ccId = `${command}-${note}`;
+            
+            if (AppState.midiLearnMode && AppState.activeMidiTarget) {
+                this.mappings[ccId] = AppState.activeMidiTarget;
+                console.log(`Mapeado CC ${ccId} a ${AppState.activeMidiTarget}`);
+                document.getElementById('btn-midi-learn').click(); 
+                return;
+            }
+
+            if (this.mappings[ccId]) {
+                const paramName = this.mappings[ccId];
+                const slider = document.getElementById(`slider-${paramName}`);
+                if(slider) {
+                    const min = parseFloat(slider.dataset.min);
+                    const max = parseFloat(slider.dataset.max);
+                    const val = min + (velocity / 127) * (max - min);
+                    window.ui.updateSlider(slider, val, true);
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 4. OUTPUT MANAGER
+ */
+class OutputManager {
+    constructor() {
+        this.win = null;
+        this.mainCanvas = document.getElementById('glcanvas');
+    }
+
+    openWindow() {
+        if (this.win && !this.win.closed) {
+            this.win.focus();
+            return;
+        }
+        
+        this.win = window.open('', 'Monitor2', 'width=800,height=600');
+        this.win.document.write(`
+            <html lang="es">
+            <head>
+                <style>
+                    body { margin: 0; background: #000; overflow: hidden; }
+                    canvas { width: 100%; height: 100%; display: block; }
+                </style>
+            </head>
+            <body>
+                <canvas id="out"></canvas>
+            </body>
+            </html>
+        `);
+        
+        const outCanvas = this.win.document.getElementById('out');
+        const outCtx = outCanvas.getContext('2d');
+        
+        const loop = () => {
+            if (this.win.closed) return;
+            outCanvas.width = this.win.innerWidth;
+            outCanvas.height = this.win.innerHeight;
+            outCtx.drawImage(this.mainCanvas, 0, 0, outCanvas.width, outCanvas.height);
+            this.win.requestAnimationFrame(loop);
+        };
+        loop();
+    }
+}
+
+/**
+ * 5. UI CONTROLS & EVENT LISTENERS
+ */
+class UIControls {
+    constructor() {
+        this.panel = document.getElementById('ui-panel');
+        this.header = document.getElementById('ui-drag-handle');
+        this.initDrag();
+        this.initToggles();
+        this.initSliders();
+        
+        // Atajo de teclado (Desktop)
+        window.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 'h' || e.key === 'Tab') {
+                e.preventDefault();
+                this.togglePanel();
+            }
+            if (e.key.toLowerCase() === 'f') {
+                this.toggleFullscreen();
+            }
+        });
+    }
+
+    togglePanel() {
+        this.panel.style.display = this.panel.style.display === 'none' ? 'flex' : 'none';
+    }
+
+    initDrag() {
+        let isDragging = false, startX, startY, initialLeft, initialTop;
+        
+        // Uso de Pointer Events para soportar tanto Mouse como Touch
+        this.header.addEventListener('pointerdown', (e) => {
+            if (window.innerWidth <= 768) return; // Desactiva arrastre en móvil para evitar bugs de layout
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            const rect = this.panel.getBoundingClientRect();
+            initialLeft = rect.left;
+            initialTop = rect.top;
+            this.header.setPointerCapture(e.pointerId);
+        });
+
+        this.header.addEventListener('pointermove', (e) => {
+            if (!isDragging) return;
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            this.panel.style.left = `${initialLeft + dx}px`;
+            this.panel.style.top = `${initialTop + dy}px`;
+        });
+
+        this.header.addEventListener('pointerup', (e) => { 
+            isDragging = false; 
+            this.header.releasePointerCapture(e.pointerId);
+        });
+    }
+
+    initToggles() {
+        // Botón físico Toggle flotante
+        document.getElementById('ui-toggle').addEventListener('click', () => {
+            this.togglePanel();
+        });
+
+        document.getElementById('btn-theme').addEventListener('click', () => {
+            AppState.theme = AppState.theme === 'night' ? 'day' : 'night';
+            document.body.className = AppState.theme + '-mode';
+            window.engine.updateTheme();
+        });
+
+        document.getElementById('btn-audio').addEventListener('click', () => {
+            if (!window.audio.active) window.audio.init();
+        });
+
+        document.getElementById('btn-monitor2').addEventListener('click', () => {
+            window.output.openWindow();
+        });
+
+        document.getElementById('btn-fullscreen').addEventListener('click', this.toggleFullscreen);
+
+        const btnMidi = document.getElementById('btn-midi-learn');
+        btnMidi.addEventListener('click', () => {
+            AppState.midiLearnMode = !AppState.midiLearnMode;
+            btnMidi.innerText = AppState.midiLearnMode ? "MIDI Learn: ON (Select Param)" : "MIDI Learn: OFF";
+            btnMidi.classList.toggle('active', AppState.midiLearnMode);
+            if (!AppState.midiLearnMode) AppState.activeMidiTarget = null;
+        });
+    }
+
+    initSliders() {
+        const sliders = document.querySelectorAll('.custom-slider');
+        sliders.forEach(slider => {
+            const param = slider.id.split('-')[1];
+            
+            let isDragging = false;
+            
+            const updateFromPointer = (e) => {
+                const rect = slider.getBoundingClientRect();
+                let x = e.clientX - rect.left;
+                let pct = Math.max(0, Math.min(1, x / rect.width));
+                const min = parseFloat(slider.dataset.min);
+                const max = parseFloat(slider.dataset.max);
+                const val = min + pct * (max - min);
+                this.updateSlider(slider, val, false);
+            };
+
+            // Pointer Events unifican Touch y Mouse
+            slider.addEventListener('pointerdown', (e) => {
+                if (AppState.midiLearnMode) {
+                    AppState.activeMidiTarget = param;
+                    document.getElementById('btn-midi-learn').innerText = `MIDI Learn: Waiting for CC... [${param}]`;
+                    return;
+                }
+                isDragging = true;
+                slider.setPointerCapture(e.pointerId);
+                updateFromPointer(e);
+            });
+            slider.addEventListener('pointermove', (e) => { 
+                if (isDragging) updateFromPointer(e); 
+            });
+            slider.addEventListener('pointerup', (e) => { 
+                isDragging = false; 
+                slider.releasePointerCapture(e.pointerId);
+            });
+        });
+    }
+
+    updateSlider(slider, val, updateDataAttr = true) {
+        const min = parseFloat(slider.dataset.min);
+        const max = parseFloat(slider.dataset.max);
+        val = Math.max(min, Math.min(max, val));
+        
+        if(updateDataAttr) slider.dataset.val = val;
+        
+        const pct = ((val - min) / (max - min)) * 100;
+        slider.querySelector('.slider-fill').style.width = `${pct}%`;
+        slider.querySelector('.slider-thumb').style.left = `${pct}%`;
+        
+        const param = slider.id.split('-')[1];
+        document.getElementById(`val-${param}`).innerText = val.toFixed(2);
+        
+        AppState.params[param] = val;
+    }
+
+    toggleFullscreen() {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(err => console.log(err));
+        } else {
+            document.exitFullscreen();
+        }
+    }
+}
+
+/**
+ * INICIALIZACIÓN Y BUCLE PRINCIPAL
+ */
+window.onload = () => {
+    window.engine = new VisualEngine();
+    window.audio = new AudioAnalyzer();
+    window.midi = new MIDIManager();
+    window.output = new OutputManager();
+    window.ui = new UIControls();
+
+    document.querySelectorAll('.custom-slider').forEach(slider => {
+        window.ui.updateSlider(slider, parseFloat(slider.dataset.val));
+    });
+
+    const loop = () => {
+        window.audio.update();
+        window.engine.render();
+        requestAnimationFrame(loop);
+    };
+    loop();
+};
+</script>
+</body>
+</html>
