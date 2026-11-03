@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no">
+    <title>VISUAL SERVER</title>
+    <style>
+        body{margin:0;overflow:hidden;background:#000}
+        canvas{display:block;position:fixed;top:0;left:0;width:100%;height:100%}
+        .info{position:fixed;bottom:10px;left:10px;color:#0f0;background:#000;padding:5px 10px;font-family:monospace;font-size:10px;z-index:100}
+        .vjs{position:fixed;top:10px;right:10px;color:#0f0;background:#000;padding:5px 10px;font-family:monospace;font-size:10px;z-index:100}
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <div class="info">🎬 VISUAL SERVER ACTIVE</div>
+    <div class="vjs" id="vjInfo">🎛️ VJs: 0</div>
+
+    <script>
+        // CONEXIÓN WEBSOCKET - VERSIÓN SIMPLIFICADA
+        let socket = null;
+        let params = {
+            flame: 1.0, noise: 0.6, speed: 1.0,
+            density: 1.0, hue: 180, sat: 1.4, bright: 1.0,
+            mode: 'full', warp: 0.5, rgb: 0.015, scan: 0.5
+        };
+        
+        function connectWebSocket() {
+            socket = new WebSocket('ws://' + location.hostname + ':8080');
+            socket.onopen = function() {
+                console.log('✅ WebSocket conectado');
+                socket.send(JSON.stringify({ type: 'register_visual_server' }));
+            };
+            socket.onmessage = function(e) {
+                try {
+                    const data = JSON.parse(e.data);
+                    if (data.type === 'params_update') {
+                        for (let k in data.params) {
+                            if (params.hasOwnProperty(k)) params[k] = data.params[k];
+                        }
+                    }
+                    if (data.type === 'vj_list') {
+                        document.getElementById('vjInfo').innerHTML = '🎛️ VJs: ' + data.vjs.length;
+                    }
+                } catch(err) { console.log(err); }
+            };
+            socket.onclose = function() {
+                console.log('❌ Desconectado, reconectando...');
+                setTimeout(connectWebSocket, 2000);
+            };
+        }
+        
+        connectWebSocket();
+        
+        // MOTOR VISUAL ASCII
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let time = 0;
+        
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+        
+        function hslToRgb(h,s,l){
+            h=((h%360)+360)%360;
+            const c=(1-Math.abs(2*l-1))*s;
+            const hp=h/60;
+            const x=c*(1-Math.abs((hp%2)-1));
+            let r1,g1,b1;
+            if(hp<=1){r1=c;g1=x;b1=0}
+            else if(hp<=2){r1=x;g1=c;b1=0}
+            else if(hp<=3){r1=0;g1=c;b1=x}
+            else if(hp<=4){r1=0;g1=x;b1=c}
+            else if(hp<=5){r1=x;g1=0;b1=c}
+            else{r1=c;g1=0;b1=x}
+            const m=l-c/2;
+            return{r:Math.min(1,r1+m),g:Math.min(1,g1+m),b:Math.min(1,b1+m)};
+        }
+        
+        function render() {
+            const w = canvas.width, h = canvas.height;
+            if(w===0){ requestAnimationFrame(render); return; }
+            
+            const cols = Math.min(100, Math.max(40, Math.floor(w/12)));
+            const rows = Math.min(60, Math.max(30, Math.floor(h/18)));
+            const cw = w/cols, ch = h/rows;
+            const chars = "█▓▒░@#$%&?*+;:,. ";
+            
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0,0,w,h);
+            ctx.font = Math.max(10, Math.min(18, ch*0.7)) + 'px monospace';
+            ctx.textBaseline = 'middle';
+            ctx.textAlign = 'center';
+            
+            for(let y=0; y<rows; y++){
+                for(let x=0; x<cols; x++){
+                    let b = 80 + 70*Math.sin(x*0.1+time)*Math.cos(y*0.08+time*0.7);
+                    b += 40*Math.sin(y*0.2+time*params.speed);
+                    b += 30*Math.sin(x*0.3+time*1.5)*params.flame;
+                    b = Math.min(230, Math.max(30, b));
+                    
+                    const idx = Math.floor(b/255 * (chars.length-1) * params.density);
+                    const char = chars[Math.min(chars.length-1, Math.max(0,idx))];
+                    const px = x*cw + cw/2;
+                    const py = y*ch + ch/2;
+                    
+                    if(params.mode === 'mono'){
+                        const v = b/255 * params.bright;
+                        ctx.fillStyle = 'rgb(' + (v*255) + ',' + (v*255) + ',' + (v*255) + ')';
+                        ctx.fillText(char, px, py);
+                        continue;
+                    }
+                    
+                    let hue = params.hue;
+                    let sat = params.sat;
+                    let light = params.bright * (0.4 + b/255 * 0.8);
+                    if(params.mode === 'colorama') hue = (params.hue + b*0.5 + time*30) % 360;
+                    
+                    const rgb = hslToRgb(hue, sat, light);
+                    ctx.fillStyle = 'rgb(' + Math.floor(rgb.r*255) + ',' + Math.floor(rgb.g*255) + ',' + Math.floor(rgb.b*255) + ')';
+                    ctx.fillText(char, px, py);
+                }
+            }
+            
+            // SCANLINES
+            if(params.scan > 0.05){
+                const img = ctx.getImageData(0,0,w,h);
+                const pix = img.data;
+                for(let y=0; y<h; y++){
+                    const val = Math.sin(y*0.12+time*25) * params.scan * 40;
+                    for(let x=0; x<w; x++){
+                        const idx = (y*w+x)*4;
+                        pix[idx] = Math.min(255, pix[idx] + val);
+                        pix[idx+1] = Math.min(255, pix[idx+1] + val*0.6);
+                        pix[idx+2] = Math.min(255, pix[idx+2] + val*1.1);
+                    }
+                }
+                ctx.putImageData(img,0,0);
+            }
+            
+            // RGB SPLIT
+            if(params.rgb > 0.01){
+                const img = ctx.getImageData(0,0,w,h);
+                const pix = img.data;
+                const off = Math.floor(w * params.rgb * 20);
+                const copy = new Uint8ClampedArray(pix);
+                for(let y=0; y<h; y++){
+                    for(let x=0; x<w; x++){
+                        const idx = (y*w+x)*4;
+                        const rIdx = (y*w + Math.min(w-1, x+off))*4;
+                        const bIdx = (y*w + Math.max(0, x-off))*4;
+                        pix[idx] = copy[rIdx];
+                        pix[idx+2] = copy[bIdx+2];
+                    }
+                }
+                ctx.putImageData(img,0,0);
+            }
+            
+            time += 0.016 * (0.8 + params.speed*0.5);
+            requestAnimationFrame(render);
+        }
+        
+        render();
+        console.log('✅ Visuales iniciados');
+    </script>
+</body>
+</html>
